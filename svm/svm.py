@@ -5,7 +5,8 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import cross_val_score
 from sklearn.feature_extraction.text import TfidfVectorizer
 import pandas as pd
-import sys
+import sys,os,datetime
+import argparse
 from subprocess import Popen
 from pre_process import process
 from sklearn.externals import joblib
@@ -15,66 +16,74 @@ import pickle
 reload(sys)
 sys.setdefaultencoding('utf8')
 
-# Create SVM classification object
-dataset_file = "../dataset/train.csv"
-raw_dataset = pd.read_csv(dataset_file)
-classes = raw_dataset["Is_Response"].drop_duplicates().values.tolist()
-le = LabelEncoder()
-le.fit(classes)
-class_with_index = le.classes_.tolist()
+class model(object):
 
-# doc2vec = pretrained_doc2vec(compressed_doc2vec_model)
-y = raw_dataset["Is_Response"]
-print class_with_index
+    def __init__(self):
+        self.dataset_file = "../dataset/train.csv"
+        self.raw_dataset = pd.read_csv(self.dataset_file)
+        self.classes = self.raw_dataset["Is_Response"].drop_duplicates().values.tolist()
+        self.le = LabelEncoder()
+        self.le.fit(self.classes)
+        self.class_with_index = self.le.classes_.tolist()
+        self.y = self.raw_dataset["Is_Response"]
+        self.stop_words = ['in','of','is','and','for']
+        self.orchestrate()
 
-trainset,testset = train_test_split(raw_dataset,test_size=0.25,random_state=42)
+    def orchestrate(self):
+        self.train_test_split()
+        self.pre_process_text()
+        self.vectorize()
+        self.model_train()
+        score = self.model_test()
+        self.write_results(score)
 
-#Creating training test and validation sets
-trainset_pre_processed = [process(sentence).lemmatize for sentence in trainset["Description"].values]
-testset_pre_processed = [process(sentence).lemmatize for sentence in testset["Description"].values]
+    def train_test_split(self):
+        self.trainset,self.testset = train_test_split(self.raw_dataset,test_size=0.25,random_state=42)
+        self.trainset = self.trainset[:10]
 
-stop_words = ['in','of','is','and','for']
+    def pre_process_text(self):
+        #Creating training test and validation sets
+        self.trainset_pre_processed = [process(sentence).lemmatize for sentence in self.trainset["Description"].values]
+        self.testset_pre_processed = [process(sentence).lemmatize for sentence in self.testset["Description"].values]
 
-#Removing the stop word feature in the tfidf
-tfidf = TfidfVectorizer(ngram_range=(1,3),stop_words=stop_words)
-#Applying tfidf model for training
-tfidf.fit(trainset_pre_processed+testset_pre_processed)
+    def vectorize(self):
+        #Removing the stop word feature in the tfidf
+        self.tfidf = TfidfVectorizer(ngram_range=(1,3),stop_words=self.stop_words)
+        #Applying tfidf model for training
+        self.tfidf.fit(self.trainset_pre_processed+self.testset_pre_processed)
+        print self.get_timestring+ ": **** TFIDF fit is completed ****"
+        self.train_data_features = self.tfidf.transform(self.trainset_pre_processed)
+        self.y_train = self.le.transform(self.trainset["Is_Response"].values)
+        self.test_data_features = self.tfidf.transform(self.testset_pre_processed)
+        self.y_test = self.le.transform(self.testset["Is_Response"].values)
+        print self.get_timestring + ": *** Train data and test data are formed ***"
 
-print "**** TFIDF fit is completed ****"
+    def model_train(self):
+        self.model = svm.SVC(C=10.0, cache_size=200, class_weight='balanced', coef0=0.0,
+                    decision_function_shape='ovr', degree=3, gamma='auto', kernel='linear',
+                    max_iter=-1, probability=True, random_state=42, shrinking=True,
+                    tol=0.001, verbose=False)
+        self.model.fit(self.train_data_features, self.y_train)
+        joblib.dump(self.model,"svm_happiness_challenge_"+self.get_timestring+".pkl")
+        print self.get_timestring + ": *** Model training is done ***"
 
-train_data_features = tfidf.transform(trainset_pre_processed)
-y_train = le.transform(trainset["Is_Response"].values)
+    def load_pickled_model(self):
+        self.model = joblib.load('svm_intent_classification_v01_accuracy1.pkl')
 
-test_data_features = tfidf.transform(testset_pre_processed)
-y_test = le.transform(testset["Is_Response"].values)
+    def model_test(self):
+        #Accuracy score for test set
+        score = self.model.score(self.test_data_features, self.y_test)
+        return score
 
-print "*** Train data and test data are formed ***"
+    def write_results(self,score):
+        text =  "Test Score: "+ str(score) + "\n"
+        text += str(self.model) + "\n"
+        with open("results_"+self.get_timestring+".txt",'w+') as f:
+            f.write(text)
+    @property
+    def get_timestring(self):
+        return str(datetime.datetime.now()).split('.')[0].replace(' ','_')
 
-#print type(train_data_features)
-#print type(y_train)
-# #Returns the array using transform
-# train_data_features = tfidf.transform(x_train)
-# test_data_features = tfidf.transform(x_test)
-# validate_data_features = tfidf.transform(x_validate)
-
-#using SVM model for training the dataset and balancing the weightage of all the words present
-
-model = svm.SVC(C=10.0, cache_size=200, class_weight='balanced', coef0=0.0,
-                decision_function_shape='ovr', degree=3, gamma='auto', kernel='linear',
-                max_iter=-1, probability=True, random_state=42, shrinking=True,
-                tol=0.001, verbose=False)
-
-
-model.fit(train_data_features, y_train)
-
-print "*** Model training is done ***"
-
-# model = joblib.load('svm_intent_classification_v01_accuracy1.pkl')
-
-#Accuracy score for test set
-
-score = model.score(test_data_features, y_test)
-print "Test Score: "+ str(score)
 
 #Predict Output
 #predicted = model.predict(test_data_features)
@@ -167,3 +176,12 @@ while(True):
     print class_with_index[int(model.predict(vectorized))]
 
 """
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--remote',type=int,default=0,help="""To control if the program run on papaerspace or in local""")
+    FLAGS, unparsed = parser.parse_known_args()
+    mdl = model()
+    if FLAGS.remote==1:
+        os.system("halt")
+
