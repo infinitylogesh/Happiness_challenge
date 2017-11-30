@@ -16,7 +16,7 @@ reload(sys)
 sys.setdefaultencoding('utf8')
 
 # Create SVM classification object
-dataset_file = "/Volumes/D/Design/garage/ml/datasets/hackerearth_sentiment/train.csv"
+dataset_file = "../dataset/train.csv"
 raw_dataset = pd.read_csv(dataset_file)
 classes = raw_dataset["Is_Response"].drop_duplicates().values.tolist()
 le = LabelEncoder()
