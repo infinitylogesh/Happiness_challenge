@@ -19,6 +19,7 @@ sys.setdefaultencoding('utf8')
 class model(object):
 
     def __init__(self):
+        self.top_nwords = 500
         self.dataset_file = "../dataset/train.csv"
         self.raw_dataset = pd.read_csv(self.dataset_file)
         self.classes = self.raw_dataset["Is_Response"].drop_duplicates().values.tolist()
@@ -39,7 +40,7 @@ class model(object):
 
     def train_test_split(self):
         self.trainset,self.testset = train_test_split(self.raw_dataset,test_size=0.25,random_state=42)
-        self.trainset = self.trainset[:10]
+        #self.trainset = self.trainset[:10]
 
     def pre_process_text(self):
         #Creating training test and validation sets
@@ -48,7 +49,7 @@ class model(object):
 
     def vectorize(self):
         #Removing the stop word feature in the tfidf
-        self.tfidf = TfidfVectorizer(ngram_range=(1,3),stop_words=self.stop_words)
+        self.tfidf = TfidfVectorizer(ngram_range=(1,3),stop_words="english",max_features=self.top_nwords)
         #Applying tfidf model for training
         self.tfidf.fit(self.trainset_pre_processed+self.testset_pre_processed)
         print self.get_timestring+ ": **** TFIDF fit is completed ****"
@@ -59,6 +60,7 @@ class model(object):
         print self.get_timestring + ": *** Train data and test data are formed ***"
 
     def model_train(self):
+        print self.get_timestring + ": *** Model training has started ***"
         self.model = svm.SVC(C=10.0, cache_size=200, class_weight='balanced', coef0=0.0,
                     decision_function_shape='ovr', degree=3, gamma='auto', kernel='linear',
                     max_iter=-1, probability=True, random_state=42, shrinking=True,
